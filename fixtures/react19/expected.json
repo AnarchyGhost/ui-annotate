@@ -1,0 +1,27 @@
+{
+  "url": "http://127.0.0.1:5104/",
+  "port": 5104,
+  "targets": [
+    {
+      "selector": "[data-testid=save]",
+      "framework": "react",
+      "componentName": "AppToolbar",
+      "file": "src/AppToolbar.jsx",
+      "line": 6
+    },
+    {
+      "selector": "[data-testid=card-text]",
+      "framework": "react",
+      "componentName": "InfoCard",
+      "file": "src/InfoCard.jsx",
+      "line": 5
+    },
+    {
+      "selector": "[data-testid=plain-text]",
+      "framework": "react",
+      "componentName": "App",
+      "file": "src/App.jsx",
+      "line": 9
+    }
+  ]
+}

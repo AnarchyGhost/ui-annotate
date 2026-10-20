@@ -1,0 +1,14 @@
+{
+  "name": "ui-annotate",
+  "version": "0.1.0",
+  "description": "UI annotations from the browser extension: MCP tools, pending digest in context, Stop guard and an optional channel.",
+  "author": { "name": "AnarchyGhost" },
+  "license": "MIT",
+  "keywords": ["ui", "feedback", "browser", "annotations", "mcp"],
+  "channels": [
+    {
+      "server": "ui-annotate",
+      "displayName": "ui-annotate"
+    }
+  ]
+}

@@ -1,0 +1,36 @@
+{
+  "name": "extension",
+  "version": "0.1.9",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "scripts": {
+    "build": "wxt build && wxt build -b firefox --mv3",
+    "dev": "wxt",
+    "dev:firefox": "wxt -b firefox --mv3",
+    "postinstall": "wxt prepare",
+    "test": "vitest run",
+    "typecheck": "vue-tsc --noEmit",
+    "e2e": "playwright test",
+    "e2e:firefox": "node e2e-firefox/run.mjs",
+    "screenshots": "playwright test -c playwright.screenshots.config.ts"
+  },
+  "dependencies": {
+    "@ui-annotate/protocol": "workspace:*",
+    "@ui-annotate/resolver": "workspace:*",
+    "vue": "3.5.44"
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@playwright/test": "1.64.1",
+    "@vue/test-utils": "2.5.1",
+    "@wxt-dev/module-vue": "1.0.3",
+    "jsdom": "30.1.3",
+    "typescript": "5.9.3",
+    "ui-annotate": "workspace:*",
+    "vitest": "4.1.12",
+    "vue-tsc": "3.3.13",
+    "web-ext": "10.8.0",
+    "wxt": "0.21.4"
+  }
+}

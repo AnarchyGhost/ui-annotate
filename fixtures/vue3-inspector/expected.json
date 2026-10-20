@@ -1,0 +1,27 @@
+{
+  "url": "http://127.0.0.1:5102/",
+  "port": 5102,
+  "targets": [
+    {
+      "selector": "[data-testid=save]",
+      "framework": "vue",
+      "componentName": "AppToolbar",
+      "file": "src/components/AppToolbar.vue",
+      "line": 8
+    },
+    {
+      "selector": "[data-testid=card-text]",
+      "framework": "vue",
+      "componentName": "InfoCard",
+      "file": "src/components/InfoCard.vue",
+      "line": 8
+    },
+    {
+      "selector": "[data-testid=plain-text]",
+      "framework": "vue",
+      "componentName": "App",
+      "file": "src/App.vue",
+      "line": 10
+    }
+  ]
+}

@@ -1,0 +1,9 @@
+node_modules/
+dist/
+.output/
+.wxt/
+.angular/
+test-results/
+playwright-report/
+*.tsbuildinfo
+.DS_Store

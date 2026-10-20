@@ -1,0 +1,27 @@
+{
+  "url": "http://127.0.0.1:5108/",
+  "port": 5108,
+  "targets": [
+    {
+      "selector": "[data-testid=save]",
+      "framework": "solid",
+      "componentName": null,
+      "file": "src/AppToolbar.jsx",
+      "line": 6
+    },
+    {
+      "selector": "[data-testid=card-text]",
+      "framework": "solid",
+      "componentName": null,
+      "file": "src/InfoCard.jsx",
+      "line": 5
+    },
+    {
+      "selector": "[data-testid=plain-text]",
+      "framework": "solid",
+      "componentName": null,
+      "file": "src/App.jsx",
+      "line": 9
+    }
+  ]
+}

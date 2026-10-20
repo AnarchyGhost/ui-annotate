@@ -1,0 +1,22 @@
+{
+  "name": "ui-annotate-monorepo",
+  "private": true,
+  "type": "module",
+  "packageManager": "pnpm@9.15.0",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "e2e": "pnpm --filter extension e2e",
+    "e2e:firefox": "pnpm --filter extension e2e:firefox",
+    "screenshots": "pnpm --filter extension screenshots"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.64.1",
+    "typescript": "5.9.3",
+    "ui-annotate": "workspace:*"
+  }
+}

@@ -1,0 +1,35 @@
+#!/bin/sh
+# Runs the bundled ui-annotate CLI on Node.js >= 22.13 (node:sqlite).
+# Agents start with a bare PATH that often lacks version managers, so known install
+# locations are tried after PATH. UI_ANNOTATE_NODE overrides the search.
+# Hooks fail open: without a suitable Node they print nothing and exit 0.
+
+root=$(CDPATH= cd -- "$(dirname -- "$0")/.." && pwd)
+cli="$root/dist/cli.js"
+
+suitable() {
+  [ -n "$1" ] && [ -x "$1" ] || return 1
+  "$1" -e 'const [a,b]=process.versions.node.split(".").map(Number);process.exit(a>22||(a===22&&b>=13)?0:1)' 2>/dev/null
+}
+
+for candidate in \
+  "$UI_ANNOTATE_NODE" \
+  "$(command -v node 2>/dev/null)" \
+  "$HOME/.local/share/mise/shims/node" \
+  "$HOME/.volta/bin/node" \
+  "$HOME/.local/share/fnm/aliases/default/bin/node" \
+  "$HOME/.asdf/shims/node" \
+  /opt/homebrew/bin/node \
+  /usr/local/bin/node \
+  "$HOME"/.nvm/versions/node/*/bin/node
+do
+  if suitable "$candidate"; then
+    exec "$candidate" "$cli" "$@"
+  fi
+done
+
+if [ "$1" = "hook" ]; then
+  exit 0
+fi
+echo "ui-annotate: Node.js >= 22.13 not found; set UI_ANNOTATE_NODE to its path" >&2
+exit 1

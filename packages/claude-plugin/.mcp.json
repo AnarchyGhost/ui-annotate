@@ -1,0 +1,8 @@
+{
+  "mcpServers": {
+    "ui-annotate": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/ui-annotate",
+      "args": ["mcp", "--channel"]
+    }
+  }
+}

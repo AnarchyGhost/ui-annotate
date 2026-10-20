@@ -1,0 +1,12 @@
+{
+  "name": "ui-annotate-local",
+  "description": "Local marketplace of the ui-annotate repository",
+  "owner": { "name": "ui-annotate" },
+  "plugins": [
+    {
+      "name": "ui-annotate",
+      "source": "./packages/claude-plugin",
+      "description": "ui-annotate MCP tools, pending-annotation hooks and an optional channel"
+    }
+  ]
+}

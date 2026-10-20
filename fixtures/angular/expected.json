@@ -1,0 +1,27 @@
+{
+  "url": "http://127.0.0.1:5107/",
+  "port": 5107,
+  "targets": [
+    {
+      "selector": "[data-testid=save]",
+      "framework": "angular",
+      "componentName": "AppToolbarComponent",
+      "file": "src/app/app-toolbar.component.ts",
+      "line": 12
+    },
+    {
+      "selector": "[data-testid=card-text]",
+      "framework": "angular",
+      "componentName": "InfoCardComponent",
+      "file": "src/app/info-card.component.ts",
+      "line": 12
+    },
+    {
+      "selector": "[data-testid=plain-text]",
+      "framework": "angular",
+      "componentName": "AppComponent",
+      "file": "src/app/app.component.ts",
+      "line": 16
+    }
+  ]
+}

@@ -1,0 +1,23 @@
+{
+  "name": "@ui-annotate/claude-plugin",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "Claude Code plugin: ui-annotate MCP server, channel and hooks",
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "validate": "claude plugin validate ../.."
+  },
+  "devDependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "@types/node": "24.19.2",
+    "@ui-annotate/protocol": "workspace:*",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "ui-annotate": "workspace:*",
+    "vitest": "4.1.12",
+    "zod": "4.6.7"
+  }
+}

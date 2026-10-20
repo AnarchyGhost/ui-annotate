@@ -1,0 +1,38 @@
+{
+  "name": "@ui-annotate/resolver",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "license": "MIT",
+  "description": "MAIN-world bundle: reads framework internals and build-plugin attributes, answers with a SourceInfo DTO",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./main.global.js": "./dist/main.global.js"
+  },
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "prepare": "pnpm build",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@jridgewell/trace-mapping": "0.3.31",
+    "@ui-annotate/protocol": "workspace:*",
+    "bippy": "0.5.43",
+    "element-source": "0.0.5"
+  },
+  "devDependencies": {
+    "jsdom": "30.1.3",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.12"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "url": "http://127.0.0.1:5106/",
+  "port": 5106,
+  "targets": [
+    {
+      "selector": "[data-testid=save]",
+      "framework": "svelte",
+      "componentName": "AppToolbar",
+      "file": "src/AppToolbar.svelte",
+      "line": 7
+    },
+    {
+      "selector": "[data-testid=card-text]",
+      "framework": "svelte",
+      "componentName": "InfoCard",
+      "file": "src/InfoCard.svelte",
+      "line": 7
+    },
+    {
+      "selector": "[data-testid=plain-text]",
+      "framework": "svelte",
+      "componentName": "App",
+      "file": "src/App.svelte",
+      "line": 9
+    }
+  ]
+}

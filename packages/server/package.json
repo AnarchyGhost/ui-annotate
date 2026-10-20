@@ -1,0 +1,39 @@
+{
+  "name": "ui-annotate",
+  "version": "0.1.0",
+  "description": "Local daemon and MCP server for ui-annotate: browser annotations delivered to coding agents",
+  "type": "module",
+  "license": "MIT",
+  "bin": {
+    "ui-annotate": "./bin/ui-annotate.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "bin",
+    "dist"
+  ],
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/sdk": "1.32.1",
+    "zod": "4.6.7"
+  },
+  "devDependencies": {
+    "@types/node": "24.19.2",
+    "@ui-annotate/protocol": "workspace:*",
+    "tsup": "8.5.1",
+    "typescript": "5.9.3",
+    "vitest": "4.1.12"
+  }
+}

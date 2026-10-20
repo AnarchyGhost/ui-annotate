@@ -1,0 +1,8 @@
+{
+  "name": "fixture-react19",
+  "private": true,
+  "type": "module",
+  "scripts": { "dev": "vite" },
+  "dependencies": { "react": "19.2.9", "react-dom": "19.2.9" },
+  "devDependencies": { "@vitejs/plugin-react": "6.1.2", "vite": "8.3.4" }
+}
