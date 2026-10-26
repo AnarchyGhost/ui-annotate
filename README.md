@@ -27,8 +27,9 @@ file. Nothing gets installed into your app: the extension reads framework intern
 - **Agent integrations**: an MCP server (stdio and Streamable HTTP), hooks that put open annotations
   into the agent's context and keep it from stopping while work is open, a Claude Code plugin with a
   live channel.
-- **Automatic mode**: every new annotation of a site goes to a background `claude`, `codex` or
-  `cursor-agent` run in the project folder, limited to reading and editing.
+- **Delivery modes per site**: new annotations go to every agent session of the project, straight
+  into one running Claude Code session you pick (**Live session**), or to a background `claude`,
+  `codex` or `cursor-agent` run limited to reading and editing (**Background agent**).
 - **Project root detection**: the daemon finds the repository behind `localhost:PORT` by itself, so
   paths are relative and annotations reach only the agent working in that repository.
 - **Local only**: one daemon on `127.0.0.1`, SQLite storage, token pairing done automatically.
@@ -43,7 +44,7 @@ flowchart LR
   end
   bg -- "HTTP + token" --> daemon["ui-annotate daemon<br/>127.0.0.1:4848, SQLite"]
   daemon -- "MCP tools, hooks, channel" --> agents["Claude Code · Codex · Cursor"]
-  daemon -. "automatic mode" .-> runs["background agent run<br/>in the project root"]
+  daemon -. "Background agent" .-> runs["background agent run<br/>in the project root"]
   agents -- "acknowledge · reply · resolve" --> daemon
   daemon -- "live updates (SSE)" --> bg
 ```
@@ -151,19 +152,47 @@ session, so annotations created while the agent was busy come with the next call
 
 The daemon is shared by all projects. Hooks and the channel show annotations of pages whose project
 root contains the agent's working directory; pages without a root appear only as a count and never
-block.
+block. Annotations a site sends to another Live session or a background run appear only as a count.
 
-## Automatic mode
+## Delivery modes
 
-Popup → *This site* → **Automatic mode** hands every new annotation of the site to a background agent
-run, with no agent session open. Pick the agent and a delay: the run starts after that many quiet
-seconds, so notes left in a row go into one run.
+Popup → *This site* → **New annotations go to** decides who gets each new annotation of the site:
 
-<img src="docs/images/popup.png" alt="Popup with automatic mode on" width="360">
+| Mode | Who gets it |
+|---|---|
+| Off | every agent session of the project: hooks and the channel, as above |
+| Live session | one running Claude Code session picked in the popup, through its channel |
+| Background agent | a background agent run of the daemon; live sessions do not see it until the run fails or asks |
+
+### Live session
+
+Start Claude Code in the project folder with the channel:
+`claude --dangerously-load-development-channels plugin:ui-annotate@ui-annotate-local`. The popup
+lists the running sessions of the page's project (name from `/rename`, idle or busy, PID); pick one.
+Each new annotation arrives in that session as a channel message, and only its hooks show it and
+block Stop.
+
+- A restarted `claude` gets a new PID. When it is the only session of the project, the site and the
+  waiting annotations move to it by themselves; with several, pick one again.
+- With no session running, the annotation stays pending with a note in the thread.
+- A session started without the channel flag drops channel messages silently. After 60 s without a
+  reaction the thread says so once.
+
+Channels are a research preview of Claude Code: interactive sessions only, the flag is required for
+plugins outside Anthropic's allowlist.
+
+### Background agent
+
+**Background agent** hands every new annotation of the site to a background agent run, with no agent
+session open. Pick the agent and a delay: the run starts after that many quiet seconds, so notes left
+in a row go into one run.
+
+<img src="docs/images/popup.png" alt="Popup with Background agent mode on" width="360">
 
 The daemon starts the CLI in the page's project root and reports in the thread: "working on it",
-then resolved or dismissed with the agent's summary, a question as a reply, or the failure reason
-(the annotation stays open). One run per project at a time.
+then resolved or dismissed with the agent's summary, a question as a reply, or the failure reason.
+An annotation still open after the run goes back to the agent sessions of the project. One run per
+project at a time.
 
 | Agent | Command | Limits |
 |---|---|---|

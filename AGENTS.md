@@ -11,7 +11,7 @@ pnpm workspace, TypeScript (strict, `noUncheckedIndexedAccess`), ESM everywhere.
 |---|---|---|
 | `packages/protocol` | zod schemas of everything on the wire, limits, markdown formatters, path normalization | tsup |
 | `packages/resolver` | MAIN-world bundle: framework detection, component and `file:line` per element, source maps | tsup |
-| `packages/server` | npm package `ui-annotate`: daemon (HTTP + SSE + SQLite), MCP server, hooks, dispatcher of automatic mode, CLI | tsup |
+| `packages/server` | npm package `ui-annotate`: daemon (HTTP + SSE + SQLite), MCP server, hooks, dispatcher of Background agent mode, live sessions, CLI | tsup |
 | `packages/claude-plugin` | Claude Code plugin: `.mcp.json`, hooks, skill, `bin/ui-annotate` launcher, bundled `dist/cli.js` | tsup |
 | `apps/extension` | WXT + Vue 3 extension: background, overlay content script (shadow root), popup | wxt |
 | `fixtures/*` | dev apps per framework with `expected.json`, used by e2e | Vite / Angular CLI |
@@ -24,7 +24,8 @@ Key files:
 - `packages/server/src/store.ts`: SQLite (`node:sqlite`), migrations in `migrate()`, events for SSE.
 - `packages/server/src/domain.ts`: status transitions and project root precedence.
 - `packages/server/src/mcp.ts`: MCP tools; `hooks/run.ts`: hook output per client.
-- `packages/server/src/project-root.ts`, `dispatch.ts`: project root detection, automatic mode.
+- `packages/server/src/project-root.ts`, `dispatch.ts`: project root detection, Background agent mode.
+- `packages/server/src/live-clients.ts`: Claude Code sessions with a connected channel, Live session mode.
 - `packages/server/src/version.ts`: `API_LEVEL` of the daemon.
 - `apps/extension/entrypoints/background.ts`: all server traffic, injection, commands, pairing.
 - `apps/extension/entrypoints/overlay.content/`: `App.vue`, components, `bus.ts`.
@@ -96,5 +97,11 @@ e2e and screenshots need `pnpm build` first: they load `apps/extension/.output/*
 - Framework internals differ by version (React 18 `_debugSource` vs React 19 `_debugStack`,
   vite-plugin-vue-inspector 7 keeping the position in the vnode). Add a fixture with `expected.json`
   for a new framework or version and check lines against the source by hand.
-- Automatic mode starts real agent CLIs. Tests use a fake command (`dispatch.test.ts`) or
+- Background agent mode starts real agent CLIs. Tests use a fake command (`dispatch.test.ts`) or
   `UI_ANNOTATE_CODEX_BIN=apps/extension/e2e/fake-agent.mjs` (Playwright config).
+- Channels need the stdio MCP server on protocol revision 2025-11-25 or older: since Claude Code
+  2.1.292 a server that negotiates 2026-07-28 is not registered as a channel. Moving to
+  `@modelcontextprotocol/sdk` v2 silently breaks Live session mode.
+- Live sessions are keyed by the PID of `claude` (`process.ppid` of the stdio server, `CLAUDE_PID`
+  in hooks); `CLAUDE_CODE_SESSION_ID` of an MCP server goes stale after `/clear`. Names and idle/busy
+  come from the undocumented `~/.claude/sessions/<pid>.json` and may disappear.

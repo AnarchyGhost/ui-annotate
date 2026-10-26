@@ -1,4 +1,5 @@
 import { WATCH_TIMEOUT_MAX_SECONDS, type Annotation, type ServerEvent, type Session, type SessionSummary } from "@ui-annotate/protocol";
+import type { ClientIdentity } from "./live-clients.js";
 import type { Store } from "./store.js";
 
 /** Open work for the agent: not yet resolved or dismissed. */
@@ -21,7 +22,8 @@ export interface AnnotationApi {
    * while waiting; null on timeout. `signal` ends the wait when the caller goes away.
    */
   watch(sessionId: string | undefined, timeoutSeconds: number, since?: string | null, signal?: AbortSignal): Promise<Annotation[] | null>;
-  subscribe(listener: (event: ServerEvent) => void): () => void;
+  /** `client`: the identity a channel registers with (HTTP only; the in-process API ignores it). */
+  subscribe(listener: (event: ServerEvent) => void, client?: ClientIdentity): () => void;
 }
 
 export const clampWatchTimeout = (seconds: number): number =>

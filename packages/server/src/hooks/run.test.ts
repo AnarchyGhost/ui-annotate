@@ -1,12 +1,13 @@
-import { AnnotationInput, HOOK_CONTEXT_LIMIT, type Annotation, type Session } from "@ui-annotate/protocol";
+import { AnnotationInput, DELIVERY_OFF, HOOK_CONTEXT_LIMIT, type Annotation, type Delivery, type Session } from "@ui-annotate/protocol";
 import { describe, expect, it } from "vitest";
 import { annotationInput } from "../test-helpers.js";
 import { buildHookOutput, scopeToProject, type ScopedAnnotations } from "./run.js";
 
-function annotation(id: string, sessionId = "s1", comment = "Fix it"): Annotation {
-  const input = AnnotationInput.parse(annotationInput({ comment }));
+function annotation(id: string, sessionId = "s1", comment = "Fix it", delivery: Delivery = DELIVERY_OFF): Annotation {
+  const { dispatch: _dispatch, ...input } = AnnotationInput.parse(annotationInput({ comment }));
   return {
     ...input,
+    delivery,
     id,
     sessionId,
     number: 1,
@@ -18,7 +19,7 @@ function annotation(id: string, sessionId = "s1", comment = "Fix it"): Annotatio
   };
 }
 
-const mine = (project: Annotation[], unscoped = 0): ScopedAnnotations => ({ project, unscoped });
+const mine = (project: Annotation[], unscoped = 0, elsewhere = 0): ScopedAnnotations => ({ project, unscoped, elsewhere });
 const none = mine([]);
 
 // Stdin payloads as the clients send them (Claude Code hooks reference).
@@ -107,5 +108,40 @@ describe("scopeToProject", () => {
     const scoped = scopeToProject(open, sessions, "/work/app/packages/web");
     expect(scoped.project.map((item) => item.id)).toEqual(["a"]);
     expect(scoped.unscoped).toBe(1);
+  });
+
+  it("hands Live session annotations only to the chosen session and background ones to nobody", () => {
+    const sessions = new Map([["mine", session("mine", "/work/app")]]);
+    const open = [
+      annotation("all", "mine"),
+      annotation("chosen", "mine", "Fix it", { mode: "session", clientPid: 100 }),
+      annotation("background", "mine", "Fix it", { mode: "background", agent: "claude", delaySeconds: 0 }),
+    ];
+    const chosen = scopeToProject(open, sessions, "/work/app", 100);
+    expect(chosen.project.map((item) => item.id)).toEqual(["all", "chosen"]);
+    expect(chosen.elsewhere).toBe(1);
+    const other = scopeToProject(open, sessions, "/work/app", 200);
+    expect(other.project.map((item) => item.id)).toEqual(["all"]);
+    expect(other.elsewhere).toBe(2);
+    // Codex and Cursor hooks have no PID: a Live session annotation is never theirs.
+    expect(scopeToProject(open, sessions, "/work/app", null).project.map((item) => item.id)).toEqual(["all"]);
+  });
+
+  it("takes a waiting Live session annotation before its own channel has connected", () => {
+    const sessions = new Map([["mine", session("mine", "/work/app")]]);
+    const waiting = [annotation("waiting", "mine", "Fix it", { mode: "session", clientPid: 100 })];
+    // SessionStart of 300: the bound session 100 is gone and no other session is live yet.
+    expect(scopeToProject(waiting, sessions, "/work/app", 300, new Map([["mine", []]])).project.map((item) => item.id)).toEqual(["waiting"]);
+    // Another live session makes the choice ambiguous: the annotation keeps waiting for 100.
+    expect(scopeToProject(waiting, sessions, "/work/app", 300, new Map([["mine", [200]]])).elsewhere).toBe(1);
+    // The bound session is live: it keeps the annotation.
+    expect(scopeToProject(waiting, sessions, "/work/app", 300, new Map([["mine", [100]]])).elsewhere).toBe(1);
+  });
+
+  it("does not block Stop for annotations sent elsewhere, but mentions them in the digest", () => {
+    const scoped = mine([], 0, 2);
+    expect(buildHookOutput("claude", "Stop", claudeStop, scoped).stdout).toBeNull();
+    const output = buildHookOutput("claude", "UserPromptSubmit", claudePrompt, scoped).stdout as { hookSpecificOutput: { additionalContext: string } };
+    expect(output.hookSpecificOutput.additionalContext).toMatch(/2 open annotation\(s\) of this project are sent to another/);
   });
 });

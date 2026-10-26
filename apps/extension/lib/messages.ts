@@ -1,4 +1,4 @@
-import type { Annotation, AnnotationInput, AnnotationPatch, ServerEvent, Session } from "@ui-annotate/protocol";
+import type { Annotation, AnnotationInput, AnnotationPatch, LiveClient, ServerEvent, Session } from "@ui-annotate/protocol";
 import type { OriginSettings } from "./settings";
 
 /** Requests from the overlay and the popup to the background, the only place that talks to the server. */
@@ -10,6 +10,8 @@ export type BackgroundRequest =
   | { type: "annotation.comment"; id: string; body: string }
   | { type: "origin.get"; origin: string }
   | { type: "origin.set"; origin: string; settings: Partial<OriginSettings> }
+  /** Live Claude Code sessions of the project of a page session, for Live session mode. */
+  | { type: "clients.list"; sessionId: string }
   | { type: "status" }
   /** Inject the overlay and start annotating (tests, scripted use). */
   | { type: "tab.activate"; tabId: number }
@@ -63,6 +65,7 @@ export type ResponseMap = {
   "annotation.comment": Annotation;
   "origin.get": OriginSettings;
   "origin.set": OriginSettings;
+  "clients.list": LiveClient[];
   status: ServerStatus;
   "tab.activate": { ok: true };
   "tab.show": { ok: true };
@@ -95,6 +98,8 @@ export interface OverlaySnapshot {
   error: string | null;
   open: number;
   total: number;
+  /** Page session of the daemon, once the overlay has opened it. */
+  sessionId: string | null;
   /** Project root of the page's session and where it came from (popup, agent, dev server, path). */
   projectRoot: string | null;
   projectRootSource: "manual" | "agent" | "port" | "path" | null;

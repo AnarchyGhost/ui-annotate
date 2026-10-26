@@ -100,10 +100,10 @@ test("README screenshots", async ({ context, sw }) => {
   await page.screenshot({ path: `${IMAGES}thread.png` });
   await page.keyboard.press("Escape");
 
-  // 4. Popup with automatic mode on.
+  // 4. Popup with Background agent mode on.
   await sw.evaluate(async (origin) => {
     const { settings } = (await chrome.storage.local.get("settings")) as { settings: { origins: Record<string, object> } };
-    settings.origins[origin] = { ...settings.origins[origin], autoDispatch: true, agent: "claude", dispatchDelaySeconds: 5 };
+    settings.origins[origin] = { ...settings.origins[origin], mode: "background", agent: "claude", dispatchDelaySeconds: 5 };
     await chrome.storage.local.set({ settings });
   }, new URL(DEMO_URL).origin);
   const tabId = await sw.evaluate(async (url) => (await chrome.tabs.query({})).find((tab) => tab.url === url)!.id!, DEMO_URL);

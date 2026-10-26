@@ -15,7 +15,7 @@ function annotation(selector: string, box = { x: 100, y: 200, width: 80, height:
     url: "http://localhost/",
     viewport: { width: 1, height: 1 },
   });
-  return { ...input, id: "a", sessionId: "s", number: 1, status: "pending", resolvedBy: null, createdAt: "", updatedAt: "", thread: [] };
+  return { ...input, delivery: { mode: "off" }, id: "a", sessionId: "s", number: 1, status: "pending", resolvedBy: null, createdAt: "", updatedAt: "", thread: [] };
 }
 
 function fakeRect(element: Element, rect: { left: number; top: number; width: number; height: number }) {

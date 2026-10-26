@@ -6,6 +6,7 @@ import type { AnnotationInput } from "@ui-annotate/protocol";
 import { loadConfig, type Config } from "./config.js";
 import { startDaemon, type RunningDaemon } from "./daemon.js";
 import type { DispatcherOptions } from "./dispatch.js";
+import type { LiveClientsOptions } from "./live-clients.js";
 
 export const EXTENSION_ORIGIN = "chrome-extension://pimhfahcdpnkbmflgggigkfdjolgemom";
 
@@ -64,7 +65,7 @@ export function freePort(): Promise<number> {
   });
 }
 
-export async function startTestDaemon(dispatch: DispatcherOptions = {}): Promise<TestDaemon> {
+export async function startTestDaemon(dispatch: DispatcherOptions = {}, live: LiveClientsOptions = {}): Promise<TestDaemon> {
   const dir = mkdtempSync(join(tmpdir(), "ui-annotate-test-"));
   const env: NodeJS.ProcessEnv = {
     ...process.env,
@@ -73,7 +74,7 @@ export async function startTestDaemon(dispatch: DispatcherOptions = {}): Promise
     UI_ANNOTATE_TOKEN_FILE: join(dir, "token"),
   };
   const config = loadConfig(env);
-  const daemon = await startDaemon(config, dispatch);
+  const daemon = await startDaemon(config, dispatch, { sessionsDir: join(dir, "claude-sessions"), ...live });
   const url = `http://127.0.0.1:${config.port}`;
   return {
     config,

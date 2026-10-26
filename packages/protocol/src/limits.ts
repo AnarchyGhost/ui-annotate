@@ -17,6 +17,8 @@ export const LIMITS = {
   url: 2000,
   title: 300,
   reason: 500,
+  /** Live Claude Code sessions the daemon keeps track of; beyond it a channel gets a plain event stream. */
+  liveClients: 32,
 } as const;
 
 /** additionalContext limit of Claude Code hooks; digest must fit under it. */

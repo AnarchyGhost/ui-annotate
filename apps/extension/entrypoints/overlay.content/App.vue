@@ -195,6 +195,7 @@ onMounted(async () => {
     error: state.error,
     open: state.annotations.filter((item) => item.status === "pending" || item.status === "acknowledged").length,
     total: state.annotations.length,
+    sessionId: state.session?.id ?? null,
     projectRoot: state.session?.projectRoot ?? null,
     projectRootSource: state.session?.projectRootSource ?? null,
   }));

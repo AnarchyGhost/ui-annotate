@@ -1,5 +1,6 @@
-import { ServerEvent, appendNormalized, type Annotation, type Session, type SessionSummary } from "@ui-annotate/protocol";
+import { ServerEvent, appendNormalized, type Annotation, type LiveClient, type Session, type SessionSummary } from "@ui-annotate/protocol";
 import type { AnnotationApi } from "./api.js";
+import type { ClientIdentity } from "./live-clients.js";
 
 export class DaemonError extends Error {
   constructor(
@@ -51,6 +52,11 @@ export class HttpApi implements AnnotationApi {
     return this.request<Annotation[]>("GET", `/annotations?${query}`);
   }
 
+  /** Live sessions of the page's project (hooks only; not part of the MCP operations). */
+  liveClients(sessionId: string) {
+    return this.request<LiveClient[]>("GET", `/sessions/${encodeURIComponent(sessionId)}/clients`);
+  }
+
   get(id: string) {
     return this.request<Annotation>("GET", `/annotations/${encodeURIComponent(id)}`);
   }
@@ -93,14 +99,20 @@ export class HttpApi implements AnnotationApi {
     return result.timeout ? null : (result.annotations ?? []);
   }
 
-  /** Follows GET /events and reconnects with backoff until unsubscribed. */
-  subscribe(listener: (event: ServerEvent) => void): () => void {
+  /**
+   * Follows GET /events and reconnects with backoff until unsubscribed. With `client`, the stream
+   * registers a live Claude Code session for Live session mode while it is open.
+   */
+  subscribe(listener: (event: ServerEvent) => void, client?: ClientIdentity): () => void {
     const controller = new AbortController();
+    const query = client
+      ? `?${new URLSearchParams({ clientPid: String(client.pid), cwd: client.cwd, ...(client.entrypoint ? { entrypoint: client.entrypoint } : {}) })}`
+      : "";
     const loop = async () => {
       let delay = 500;
       while (!controller.signal.aborted) {
         try {
-          const response = await fetch(`${this.baseUrl}/events`, {
+          const response = await fetch(`${this.baseUrl}/events${query}`, {
             headers: { authorization: `Bearer ${this.token}`, accept: "text/event-stream" },
             signal: controller.signal,
           });

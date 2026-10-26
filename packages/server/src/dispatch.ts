@@ -2,7 +2,7 @@ import { spawn } from "node:child_process";
 import { mkdtempSync, readFileSync, rmSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { PAGE_DATA_NOTE, formatAnnotationMarkdown, type Annotation, type Dispatch, type DispatchAgent } from "@ui-annotate/protocol";
+import { DELIVERY_OFF, PAGE_DATA_NOTE, formatAnnotationMarkdown, type Annotation, type Dispatch, type DispatchAgent } from "@ui-annotate/protocol";
 import { LocalApi, OPEN_STATUSES } from "./api.js";
 import { presentAnnotations } from "./mcp.js";
 import type { Store } from "./store.js";
@@ -173,7 +173,7 @@ export interface DispatcherOptions {
 }
 
 /**
- * Background agent runs for sites in automatic mode. Annotations of one project collect during
+ * Background agent runs for sites in Background agent mode. Annotations of one project collect during
  * the delay into one run; a project has one run at a time, later annotations wait for it.
  */
 export class Dispatcher {
@@ -196,7 +196,8 @@ export class Dispatcher {
     if (this.closed) return;
     const root = this.store.getSession(annotation.sessionId).projectRoot;
     if (!root) {
-      this.store.addMessage(annotation.id, "agent", "reply", "Automatic mode: no project root for this page, nothing started. Set Project root in the extension popup.");
+      this.store.addMessage(annotation.id, "agent", "reply", "Background agent: no project root for this page, nothing started. Set Project root in the extension popup.");
+      this.store.setDelivery(annotation.id, DELIVERY_OFF);
       return;
     }
     const queue = this.queues.get(root) ?? { agent: dispatch.agent, ids: [], timer: null, ready: false, running: false };
@@ -254,7 +255,7 @@ export class Dispatcher {
     for (const annotation of open) {
       this.safely(() => {
         this.store.transition(annotation.id, { action: "acknowledge", role: "agent" });
-        this.store.addMessage(annotation.id, "agent", "reply", `Automatic mode: ${agent} is working on it in the background.`);
+        this.store.addMessage(annotation.id, "agent", "reply", `Background agent: ${agent} is working on it.`);
       });
     }
     const scratch = mkdtempSync(join(tmpdir(), "ui-annotate-run-"));
@@ -275,9 +276,13 @@ export class Dispatcher {
     if (!(OPEN_STATUSES as readonly string[]).includes(current.status)) return;
     if (outcome?.kind === "resolved") this.store.transition(id, { action: "resolve", role: "agent", summary: outcome.text });
     else if (outcome?.kind === "dismissed") this.store.transition(id, { action: "dismiss", role: "agent", reason: outcome.text });
-    else if (outcome?.kind === "question") this.store.addMessage(id, "agent", "reply", outcome.text);
-    else if (result.error) this.store.addMessage(id, "agent", "reply", `Automatic mode: ${agent} run failed, ${result.error}`);
-    else this.store.addMessage(id, "agent", "reply", `Automatic mode: ${agent} finished without a result for this annotation. Last output: ${result.output.trim().slice(-ERROR_TAIL)}`);
+    else {
+      if (outcome?.kind === "question") this.store.addMessage(id, "agent", "reply", outcome.text);
+      else if (result.error) this.store.addMessage(id, "agent", "reply", `Background agent: ${agent} run failed, ${result.error}`);
+      else this.store.addMessage(id, "agent", "reply", `Background agent: ${agent} finished without a result for this annotation. Last output: ${result.output.trim().slice(-ERROR_TAIL)}`);
+      // Still open after the run: back to the agent sessions of the project, which saw nothing of it so far.
+      this.store.setDelivery(id, DELIVERY_OFF);
+    }
   }
 
   private safely(work: () => void): void {

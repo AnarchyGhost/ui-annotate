@@ -75,7 +75,7 @@ const runLog = () => {
   }
 };
 
-describe("automatic mode", () => {
+describe("Background agent mode", () => {
   it("runs the agent in the project root and resolves with its summary", async () => {
     const created = await annotate(await session(), "Rename Save to Store");
     await t.daemon.dispatcher.idle();
@@ -83,7 +83,7 @@ describe("automatic mode", () => {
     expect(annotation).toMatchObject({ status: "resolved", resolvedBy: "agent" });
     expect(annotation.thread.map((message) => [message.kind, message.body])).toEqual([
       ["acknowledge", ""],
-      ["reply", "Automatic mode: claude is working on it in the background."],
+      ["reply", "Background agent: claude is working on it."],
       ["resolve", `handled ${created.id}`],
     ]);
     // cwd is the project root; the hooks see the dispatch flag.
@@ -118,6 +118,8 @@ describe("automatic mode", () => {
     const asked = await fetchAnnotation(question.id);
     expect(asked.status).toBe("acknowledged");
     expect(asked.thread.at(-1)).toMatchObject({ role: "agent", kind: "reply", body: `handled ${question.id}` });
+    // The user answers in the thread; the agent sessions of the project pick it up from there.
+    expect(asked.delivery).toEqual({ mode: "off" });
     expect(await fetchAnnotation(dismissed.id)).toMatchObject({ status: "dismissed", resolvedBy: "agent" });
   });
 
@@ -126,7 +128,8 @@ describe("automatic mode", () => {
     await t.daemon.dispatcher.idle();
     const annotation = await fetchAnnotation(created.id);
     expect(annotation.status).toBe("acknowledged");
-    expect(annotation.thread.at(-1)?.body).toBe("Automatic mode: claude run failed, exit code 1: boom");
+    expect(annotation.thread.at(-1)?.body).toBe("Background agent: claude run failed, exit code 1: boom");
+    expect(annotation.delivery).toEqual({ mode: "off" });
   });
 
   it("starts nothing without a project root and says so", async () => {
@@ -134,8 +137,20 @@ describe("automatic mode", () => {
     await t.daemon.dispatcher.idle();
     const annotation = await fetchAnnotation(created.id);
     expect(annotation.status).toBe("pending");
-    expect(annotation.thread[0]?.body).toMatch(/^Automatic mode: no project root/);
+    expect(annotation.thread[0]?.body).toMatch(/^Background agent: no project root/);
+    expect(annotation.delivery).toEqual({ mode: "off" });
     expect(runLog()).toEqual([]);
+  });
+
+  it("takes the background run from `delivery` as well", async () => {
+    const response = await t.call(`/sessions/${await session()}/annotations`, {
+      method: "POST",
+      json: annotationInput({ comment: "via delivery", delivery: { mode: "background", agent: "claude", delaySeconds: 0 } }),
+    });
+    const created = (await response.json()) as Annotation;
+    expect(created.delivery).toEqual({ mode: "background", agent: "claude", delaySeconds: 0 });
+    await t.daemon.dispatcher.idle();
+    expect((await fetchAnnotation(created.id)).status).toBe("resolved");
   });
 
   it("leaves annotations without dispatch to the user's agents", async () => {

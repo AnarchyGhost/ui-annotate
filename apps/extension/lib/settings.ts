@@ -1,4 +1,6 @@
-import type { DispatchAgent } from "@ui-annotate/protocol";
+import type { Delivery, DispatchAgent } from "@ui-annotate/protocol";
+
+export type DeliveryMode = Delivery["mode"];
 import { browser } from "wxt/browser";
 
 export interface OriginSettings {
@@ -9,8 +11,13 @@ export interface OriginSettings {
   /** Treat `#/route` as part of the page (hash routers). */
   includeHash: boolean;
   hideResolved: boolean;
-  /** Every new annotation goes to a background run of `agent` in the project root. */
-  autoDispatch: boolean;
+  /**
+   * Who gets each new annotation: every agent session of the project (off), one live Claude Code
+   * session (`clientPid`), or a background run of `agent` in the project root.
+   */
+  mode: DeliveryMode;
+  /** PID of the `claude` process of the chosen Live session. */
+  clientPid: number | null;
   agent: DispatchAgent;
   /** Quiet period before the run; annotations left meanwhile go into the same run. */
   dispatchDelaySeconds: number;
@@ -29,7 +36,8 @@ export const DEFAULT_ORIGIN_SETTINGS: OriginSettings = {
   projectRoot: null,
   includeHash: false,
   hideResolved: false,
-  autoDispatch: false,
+  mode: "off",
+  clientPid: null,
   agent: "claude",
   dispatchDelaySeconds: 5,
 };
@@ -51,8 +59,25 @@ export async function saveSettings(patch: Partial<Settings>): Promise<Settings> 
   return next;
 }
 
+/** Stored before Live session mode: the automatic mode switch, now `mode: "background"`. */
+type LegacyOriginSettings = Partial<OriginSettings> & { autoDispatch?: boolean };
+
 export function originSettings(settings: Settings, origin: string): OriginSettings {
-  return { ...DEFAULT_ORIGIN_SETTINGS, ...settings.origins[origin] };
+  const { autoDispatch, ...stored } = (settings.origins[origin] ?? {}) as LegacyOriginSettings;
+  const mode = stored.mode ?? (autoDispatch ? "background" : DEFAULT_ORIGIN_SETTINGS.mode);
+  return { ...DEFAULT_ORIGIN_SETTINGS, ...stored, mode };
+}
+
+/** Delivery of a new annotation of the site, sent with it to the daemon. */
+export function deliveryFor(settings: OriginSettings): Delivery {
+  switch (settings.mode) {
+    case "off":
+      return { mode: "off" };
+    case "session":
+      return { mode: "session", clientPid: settings.clientPid };
+    case "background":
+      return { mode: "background", agent: settings.agent, delaySeconds: settings.dispatchDelaySeconds };
+  }
 }
 
 export async function updateOrigin(origin: string, patch: Partial<OriginSettings>): Promise<OriginSettings> {

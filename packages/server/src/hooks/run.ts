@@ -1,4 +1,5 @@
 import { HOOK_CONTEXT_LIMIT, formatPendingDigest, type Annotation, type Session } from "@ui-annotate/protocol";
+import { deliveredTo, withinRoot } from "../domain.js";
 
 export type HookClient = "claude" | "codex" | "cursor";
 
@@ -25,25 +26,40 @@ export interface ScopedAnnotations {
   project: Annotation[];
   /** Pages without a project root: could belong to any project, so only counted. */
   unscoped: number;
+  /** This project's annotations sent to another live session or a background run: only counted. */
+  elsewhere: number;
 }
 
 /**
  * Splits open annotations by the page's project root (the daemon is shared across projects).
- * Annotations of other projects are dropped. Only this project's annotations reach the agent's
- * context and block Stop; the text of root-less pages stays behind get_pending.
+ * Annotations of other projects are dropped. Only this project's annotations for this session
+ * (`clientPid`: CLAUDE_PID of the hook, null for other agents) reach the agent's context and
+ * block Stop; the text of root-less pages stays behind get_pending. `livePids`: live sessions per
+ * page session id, see `deliveredTo`.
  */
-export function scopeToProject(annotations: Annotation[], sessions: Map<string, Session>, cwd: string | null): ScopedAnnotations {
-  const scoped: ScopedAnnotations = { project: [], unscoped: 0 };
+export function scopeToProject(
+  annotations: Annotation[],
+  sessions: Map<string, Session>,
+  cwd: string | null,
+  clientPid: number | null = null,
+  livePids?: Map<string, number[]>,
+): ScopedAnnotations {
+  const scoped: ScopedAnnotations = { project: [], unscoped: 0, elsewhere: 0 };
   for (const annotation of annotations) {
     const root = sessions.get(annotation.sessionId)?.projectRoot;
     if (!root || !cwd) {
       scoped.unscoped += 1;
       continue;
     }
-    const normalized = root.replace(/\/+$/, "");
-    if (cwd === normalized || cwd.startsWith(`${normalized}/`)) scoped.project.push(annotation);
+    if (!withinRoot(cwd, root)) continue;
+    if (deliveredTo(annotation, clientPid, livePids?.get(annotation.sessionId))) scoped.project.push(annotation);
+    else scoped.elsewhere += 1;
   }
   return scoped;
+}
+
+function elsewhereLine(count: number): string {
+  return `ui-annotate: ${count} open annotation(s) of this project are sent to another Claude Code session or a background agent run; leave them to it.`;
 }
 
 function stopReason(count: number): string {
@@ -57,7 +73,7 @@ function unscopedLine(count: number): string {
 export function buildHookOutput(client: HookClient, event: string, input: HookInput, scoped: ScopedAnnotations): HookOutput {
   const normalized = event.toLowerCase();
   const open = scoped.project;
-  if (open.length === 0 && scoped.unscoped === 0) return { stdout: null };
+  if (open.length === 0 && scoped.unscoped === 0 && scoped.elsewhere === 0) return { stdout: null };
 
   if (normalized === "stop") {
     if (open.length === 0) return { stdout: null };
@@ -70,7 +86,9 @@ export function buildHookOutput(client: HookClient, event: string, input: HookIn
     return { stdout: { decision: "block", reason: stopReason(open.length) } };
   }
 
-  const tail = scoped.unscoped > 0 ? unscopedLine(scoped.unscoped) : "";
+  const tail = [scoped.unscoped > 0 ? unscopedLine(scoped.unscoped) : "", scoped.elsewhere > 0 ? elsewhereLine(scoped.elsewhere) : ""]
+    .filter(Boolean)
+    .join("\n\n");
   const budget = HOOK_CONTEXT_LIMIT - (tail ? tail.length + 2 : 0);
   const digest = [formatPendingDigest(open, budget), tail].filter(Boolean).join("\n\n");
   if (client === "cursor") {

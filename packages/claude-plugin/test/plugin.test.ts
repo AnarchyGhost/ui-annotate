@@ -126,6 +126,23 @@ describe("hooks through bin/ui-annotate", () => {
     expect(await runHook("Stop", fixture("stop"), { UI_ANNOTATE_DISPATCH: "1" })).toEqual({ stdout: "", code: 0 });
   });
 
+  it("give SessionStart the Live session annotation waiting for a session that is gone", async () => {
+    const session = await call("/sessions", { url: "http://localhost:5173/waiting", title: "Waiting", projectRoot: "/work/app" });
+    const annotation = await call(`/sessions/${session.id}/annotations`, {
+      kind: "element",
+      comment: "Waiting for a restarted session",
+      targets: [{ element: "p", selector: "p", elementPath: "p", boundingBox: { x: 0, y: 0, width: 1, height: 1 }, source: {} }],
+      url: "http://localhost:5173/waiting",
+      viewport: { width: 1, height: 1 },
+      delivery: { mode: "session", clientPid: 9001 },
+    });
+    // The new claude (CLAUDE_PID 9002) has not connected its channel yet.
+    const start = JSON.parse((await runHook("SessionStart", fixture("session-start"), { CLAUDE_PID: "9002" })).stdout);
+    expect(start.hookSpecificOutput.additionalContext).toContain("Waiting for a restarted session");
+    expect(start.hookSpecificOutput.additionalContext).not.toMatch(/sent to another Claude Code session/);
+    await call(`/annotations/${annotation.id}/actions`, { action: "dismiss", reason: "test cleanup" });
+  });
+
   it("fail open when the daemon is unreachable", async () => {
     expect(await runHook("Stop", fixture("stop"), { UI_ANNOTATE_PORT: "1" })).toEqual({ stdout: "", code: 0 });
   });
@@ -181,6 +198,49 @@ describe("bundled MCP server", () => {
       expect(params.meta).toMatchObject({ annotation_id: annotation.id, session_id: session.id });
     } finally {
       await client.close();
+    }
+  });
+
+  it("pushes a Live session annotation only into the chosen session", async () => {
+    const project = mkdtempSync(join(tmpdir(), "ui-annotate-live-"));
+    const sessions = [7001, 7002].map((pid) => {
+      const client = new Client({ name: `plugin-test-${pid}`, version: "0" });
+      const ids: string[] = [];
+      client.fallbackNotificationHandler = async (notification) => {
+        if (notification.method === "notifications/claude/channel") ids.push((notification.params as { meta: { annotation_id: string } }).meta.annotation_id);
+      };
+      const transport = new StdioClientTransport({
+        command: LAUNCHER,
+        args: ["mcp", "--channel"],
+        env: { ...env, UI_ANNOTATE_CLIENT_PID: String(pid) } as Record<string, string>,
+        cwd: project,
+      });
+      return { client, transport, ids };
+    });
+    try {
+      for (const { client, transport } of sessions) await client.connect(transport);
+      const page = await call("/sessions", { url: "http://localhost:5173/live", title: "Live", projectRoot: project });
+      // Both channels registered with the daemon before anything is annotated.
+      for (let listed: Array<{ pid: number }> = []; listed.length < 2; await new Promise((resolve) => setTimeout(resolve, 50))) {
+        listed = (await call(`/sessions/${page.id}/clients`)) as unknown as Array<{ pid: number }>;
+      }
+      const annotate = (delivery: unknown) =>
+        call(`/sessions/${page.id}/annotations`, {
+          kind: "element",
+          comment: "Live",
+          targets: [{ element: "p", selector: "p", elementPath: "p", boundingBox: { x: 0, y: 0, width: 1, height: 1 }, source: {} }],
+          url: "http://localhost:5173/live",
+          viewport: { width: 1, height: 1 },
+          delivery,
+        });
+      const chosen = await annotate({ mode: "session", clientPid: 7002 });
+      const everyone = await annotate({ mode: "off" });
+      await new Promise((resolve) => setTimeout(resolve, 800));
+      expect(sessions[0]!.ids).toEqual([everyone.id]);
+      expect(sessions[1]!.ids).toEqual([chosen.id, everyone.id]);
+    } finally {
+      for (const { client } of sessions) await client.close();
+      rmSync(project, { recursive: true, force: true });
     }
   });
 });

@@ -1,4 +1,4 @@
-import type { Annotation, Session } from "@ui-annotate/protocol";
+import type { Annotation, LiveClient, Session } from "@ui-annotate/protocol";
 import { browser, type Browser } from "wxt/browser";
 import { defineBackground } from "wxt/utils/define-background";
 import {
@@ -16,6 +16,7 @@ import {
 } from "../lib/messages";
 import { ServerClient, ServerError } from "../lib/server";
 import {
+  deliveryFor,
   isLoopbackOrigin,
   loadSettings,
   originSettings,
@@ -26,8 +27,8 @@ import {
 } from "../lib/settings";
 
 const FIREFOX = import.meta.env.FIREFOX;
-/** Daemon API level this build needs (packages/server/src/version.ts); 4 brings automatic mode. */
-const SERVER_API_LEVEL = 4;
+/** Daemon API level this build needs (packages/server/src/version.ts); 5 brings Live session mode. */
+const SERVER_API_LEVEL = 5;
 
 const RESOLVER_FILE = "/content-scripts/resolver.js";
 const OVERLAY_FILE = "/content-scripts/overlay.js";
@@ -191,13 +192,25 @@ async function handle(request: BackgroundRequest, senderTabId: number | undefine
       });
     }
     case "annotation.create": {
-      // Automatic mode comes from the site settings only, whatever the overlay sent.
-      const settings = originSettings(await loadSettings(), new URL(request.input.url).origin);
-      const dispatch = settings.autoDispatch ? { agent: settings.agent, delaySeconds: settings.dispatchDelaySeconds } : null;
-      return withServer((api) =>
-        api.request("POST", `/sessions/${encodeURIComponent(request.sessionId)}/annotations`, { ...request.input, dispatch }),
+      // Delivery comes from the site settings only, whatever the overlay sent.
+      const origin = new URL(request.input.url).origin;
+      const settings = originSettings(await loadSettings(), origin);
+      const annotation = await withServer((api) =>
+        api.request<Annotation>("POST", `/sessions/${encodeURIComponent(request.sessionId)}/annotations`, {
+          ...request.input,
+          delivery: deliveryFor(settings),
+          dispatch: null,
+        }),
       );
+      // The daemon moved the Live session to a restarted `claude`: the site follows it.
+      const { delivery } = annotation;
+      if (settings.mode === "session" && delivery.mode === "session" && delivery.clientPid !== settings.clientPid) {
+        await updateOrigin(origin, { clientPid: delivery.clientPid });
+      }
+      return annotation;
     }
+    case "clients.list":
+      return withServer((api) => api.request<LiveClient[]>("GET", `/sessions/${encodeURIComponent(request.sessionId)}/clients`));
     case "annotation.patch":
       return withServer((api) => api.request("PATCH", `/annotations/${encodeURIComponent(request.id)}`, request.patch));
     case "annotation.delete":

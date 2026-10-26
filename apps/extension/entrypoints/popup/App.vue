@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { DispatchAgent } from "@ui-annotate/protocol";
+import type { DispatchAgent, LiveClient } from "@ui-annotate/protocol";
 import { computed, onBeforeUnmount, onMounted, ref } from "vue";
 import { browser } from "wxt/browser";
 import type { OverlayAction, OverlaySnapshot, ServerStatus, Shortcuts } from "../../lib/messages";
@@ -11,6 +11,7 @@ import {
   loadSettings,
   permissionPattern,
   saveSettings,
+  type DeliveryMode,
   type OriginSettings,
 } from "../../lib/settings";
 
@@ -25,6 +26,17 @@ const ACTION_LABELS: Array<[OverlayAction, string]> = [
 ];
 const shortcuts = ref<Shortcuts | null>(null);
 const AGENTS: DispatchAgent[] = ["claude", "codex", "cursor"];
+const MODES: Array<[DeliveryMode, string]> = [
+  ["off", "Off"],
+  ["session", "Live session"],
+  ["background", "Background agent"],
+];
+const MODE_HINT: Record<DeliveryMode, string> = {
+  off: "Agent sessions in the project folder see new annotations through hooks and the channel.",
+  session: "Each new annotation goes straight into one running Claude Code session through its channel.",
+  background: "Each new annotation goes to a background agent run in the project root: it reads and edits files, then resolves or asks in the thread.",
+};
+const CHANNEL_COMMAND = "claude --dangerously-load-development-channels plugin:ui-annotate@ui-annotate-local";
 
 const status = ref<ServerStatus | null>(null);
 const tab = ref<{ id: number; origin: string; path: string } | null>(null);
@@ -37,6 +49,28 @@ const rootSaved = ref(false);
 const token = ref("");
 const serverUrl = ref("");
 const connectionSaved = ref(false);
+/** Live Claude Code sessions of the page's project; null until read. */
+const liveClients = ref<LiveClient[] | null>(null);
+
+/** The chosen session is not among the live ones: annotations wait for it. */
+const boundOffline = computed(() => {
+  const pid = settings.value?.clientPid;
+  return pid != null && liveClients.value !== null && !liveClients.value.some((client) => client.pid === pid);
+});
+
+function clientTitle(client: LiveClient): string {
+  if (client.name) return client.name;
+  const root = overlay.value?.projectRoot;
+  const relative = root && client.cwd.startsWith(root) ? client.cwd.slice(root.length).replace(/^\//, "") : client.cwd;
+  return relative || "project root";
+}
+
+function clientDetails(client: LiveClient): string {
+  const started = new Date(client.connectedAt).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
+  return [client.status, client.entrypoint && client.entrypoint !== "cli" ? client.entrypoint : null, `since ${started}`, `PID ${client.pid}`]
+    .filter(Boolean)
+    .join(" · ");
+}
 
 type Health = "checking" | "no-access" | "offline" | "outdated" | "pairing" | "rejected" | "connected";
 
@@ -99,6 +133,22 @@ async function readOverlay() {
     .sendMessage(tab.value.id, { type: "overlay.state" })
     .then((snapshot) => (snapshot as OverlaySnapshot | null) ?? null)
     .catch(() => null);
+}
+
+/** Same rule as the daemon: a session that is gone gives way to the only live one. */
+async function readClients() {
+  const sessionId = overlay.value?.sessionId;
+  if (!sessionId || settings.value?.mode !== "session") return;
+  liveClients.value = await send({ type: "clients.list", sessionId }).catch(() => null);
+  const [only] = liveClients.value ?? [];
+  if (only && liveClients.value?.length === 1 && settings.value.clientPid !== only.pid && (settings.value.clientPid === null || boundOffline.value)) {
+    await update({ clientPid: only.pid });
+  }
+}
+
+async function setMode(mode: DeliveryMode) {
+  await update({ mode });
+  await readClients();
 }
 
 async function readTab() {
@@ -200,7 +250,8 @@ onMounted(async () => {
     await readOverlay();
     if (serverReady.value && (!overlay.value || overlay.value.hidden)) await showOverlay();
   }
-  poll = setInterval(() => void readOverlay(), 1000);
+  await readClients();
+  poll = setInterval(() => void readOverlay().then(readClients), 1000);
 });
 
 onBeforeUnmount(() => {
@@ -305,20 +356,48 @@ onBeforeUnmount(() => {
           <span class="hint">For apps routed by <code>#/path</code>.</span>
         </span>
       </label>
-      <label class="switch">
-        <input
-          type="checkbox"
-          :checked="settings.autoDispatch"
-          data-testid="popup-auto"
-          @change="update({ autoDispatch: ($event.target as HTMLInputElement).checked })"
-        />
-        <span class="track" />
-        <span class="text">
-          <span class="label">Automatic mode</span>
-          <span class="hint">Each new annotation goes to a background agent run in the project root: it reads and edits files, then resolves or asks in the thread.</span>
-        </span>
-      </label>
-      <div v-if="settings.autoDispatch" class="dispatch" data-testid="popup-dispatch">
+      <div class="field">
+        <span class="label">New annotations go to</span>
+        <div class="segmented" role="radiogroup" aria-label="New annotations go to">
+          <button
+            v-for="[mode, label] in MODES"
+            :key="mode"
+            role="radio"
+            :aria-checked="settings.mode === mode"
+            :class="{ active: settings.mode === mode }"
+            :data-testid="`popup-mode-${mode}`"
+            @click="setMode(mode)"
+          >
+            {{ label }}
+          </button>
+        </div>
+        <span class="hint">{{ MODE_HINT[settings.mode] }}</span>
+      </div>
+      <div v-if="settings.mode === 'session'" class="dispatch" data-testid="popup-live">
+        <ul v-if="liveClients?.length || boundOffline" class="clients" role="radiogroup" aria-label="Claude Code session">
+          <li v-for="client in liveClients" :key="client.pid">
+            <button
+              role="radio"
+              :aria-checked="settings.clientPid === client.pid"
+              :class="{ active: settings.clientPid === client.pid }"
+              :data-testid="`popup-client-${client.pid}`"
+              @click="update({ clientPid: client.pid })"
+            >
+              <span class="client-name">{{ clientTitle(client) }}</span>
+              <span class="hint">{{ clientDetails(client) }}</span>
+            </button>
+          </li>
+          <li v-if="boundOffline" class="offline" data-testid="popup-client-offline">
+            The chosen session (PID {{ settings.clientPid }}) is not running: annotations wait for it.
+          </li>
+        </ul>
+        <span v-if="overlay && !settings.projectRoot && !overlay.projectRoot" class="error">No project root for this page yet: sessions are matched by it.</span>
+        <template v-else-if="!liveClients?.length">
+          <span class="hint" data-testid="popup-live-empty">No Claude Code session with the ui-annotate channel in this project. Start one in the project folder:</span>
+          <code class="command-line">{{ CHANNEL_COMMAND }}</code>
+        </template>
+      </div>
+      <div v-if="settings.mode === 'background'" class="dispatch" data-testid="popup-dispatch">
         <div class="segmented" role="radiogroup" aria-label="Agent">
           <button
             v-for="agent in AGENTS"

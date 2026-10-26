@@ -3,20 +3,22 @@ import { EventEmitter } from "node:events";
 import { mkdirSync } from "node:fs";
 import { dirname } from "node:path";
 import { DatabaseSync } from "node:sqlite";
-import type {
-  Annotation,
-  AnnotationPatch,
-  AnnotationStatus,
-  ParsedAnnotationInput,
-  ProjectRootSource,
-  ServerEvent,
-  Session,
-  SessionSummary,
-  ThreadKind,
-  ThreadMessage,
-  ThreadRole,
+import {
+  DELIVERY_OFF,
+  type Annotation,
+  type AnnotationPatch,
+  type AnnotationStatus,
+  type Delivery,
+  type ParsedAnnotationInput,
+  type ProjectRootSource,
+  type ServerEvent,
+  type Session,
+  type SessionSummary,
+  type ThreadKind,
+  type ThreadMessage,
+  type ThreadRole,
 } from "@ui-annotate/protocol";
-import { applyTransition, replacesRoot, sessionKey, transitionForStatus, type Transition } from "./domain.js";
+import { applyTransition, deliveryOf, replacesRoot, sessionKey, transitionForStatus, type Transition } from "./domain.js";
 
 export class NotFoundError extends Error {
   constructor(what: string) {
@@ -71,8 +73,11 @@ interface ThreadRow {
 
 type AnnotationData = Pick<
   Annotation,
-  "kind" | "comment" | "intent" | "severity" | "targets" | "selectedText" | "area" | "url" | "viewport"
+  "kind" | "comment" | "intent" | "severity" | "targets" | "selectedText" | "area" | "url" | "viewport" | "delivery"
 >;
+
+/** Rows written before API level 5 have no `delivery`. */
+type StoredData = Omit<AnnotationData, "delivery"> & Partial<Pick<AnnotationData, "delivery">>;
 
 const SCHEMA = `
 CREATE TABLE IF NOT EXISTS sessions (
@@ -195,7 +200,7 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
     return rows.map((row) => ({ ...toSession(row), pending: Number(row.pending), total: Number(row.total) }));
   }
 
-  createAnnotation(sessionId: string, input: ParsedAnnotationInput): Annotation {
+  createAnnotation(sessionId: string, input: ParsedAnnotationInput, delivery: Delivery = deliveryOf(input)): Annotation {
     this.getSession(sessionId);
     const id = newId("a");
     const now = this.now();
@@ -209,6 +214,7 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
       area: input.area,
       url: input.url,
       viewport: input.viewport,
+      delivery,
     };
     // Number and insert in one transaction: two daemons on one file must not hand out the same number.
     this.transaction(() => {
@@ -259,7 +265,7 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
     this.transaction(() => {
       if (hasContent) {
         const row = this.db.prepare("SELECT data FROM annotations WHERE id = ?").get(id) as { data: string };
-        const data = { ...(JSON.parse(row.data) as AnnotationData), ...content };
+        const data = { ...(JSON.parse(row.data) as StoredData), ...content };
         this.db.prepare("UPDATE annotations SET data = ?, updated_at = ? WHERE id = ?").run(JSON.stringify(data), this.now(), id);
       }
       if (transition) this.applyTransitionRow(current, transition);
@@ -270,6 +276,17 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
   transition(id: string, transition: Transition): Annotation {
     const current = this.getAnnotation(id);
     this.transaction(() => this.applyTransitionRow(current, transition));
+    return this.emitUpdated(id);
+  }
+
+  /** Changes who gets the annotation: a failed background run hands it back, a new live session takes it over. */
+  setDelivery(id: string, delivery: Delivery): Annotation {
+    this.getAnnotation(id);
+    this.transaction(() => {
+      const row = this.db.prepare("SELECT data FROM annotations WHERE id = ?").get(id) as { data: string };
+      const data: StoredData = { ...(JSON.parse(row.data) as StoredData), delivery };
+      this.db.prepare("UPDATE annotations SET data = ?, updated_at = ? WHERE id = ?").run(JSON.stringify(data), this.now(), id);
+    });
     return this.emitUpdated(id);
   }
 
@@ -335,7 +352,7 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
   }
 
   private hydrate(row: AnnotationRow): Annotation {
-    const data = JSON.parse(row.data) as AnnotationData;
+    const { delivery = DELIVERY_OFF, ...data } = JSON.parse(row.data) as StoredData;
     const thread = (
       this.db.prepare("SELECT * FROM thread WHERE annotation_id = ? ORDER BY created_at, rowid").all(row.id) as unknown as ThreadRow[]
     ).map(
@@ -353,6 +370,7 @@ export class Store extends EventEmitter<{ event: [ServerEvent] }> {
       number: Number(row.number),
       status: row.status,
       ...data,
+      delivery,
       resolvedBy: row.resolved_by,
       createdAt: row.created_at,
       updatedAt: row.updated_at,

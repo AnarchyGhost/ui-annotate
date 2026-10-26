@@ -146,7 +146,7 @@ describe("outdated daemon", () => {
       await client.connect(new StdioClientTransport({ command: process.execPath, args: [CLI, "mcp"], env, stderr: "pipe" }));
       await oldExited;
       const health = (await (await fetch(`http://127.0.0.1:${port}/health`)).json()) as { api: number; pid: number };
-      expect(health.api).toBe(4);
+      expect(health.api).toBe(5);
       expect(health.pid).not.toBe(old.pid);
       expect((await client.listTools()).tools).toHaveLength(TOOLS.length);
     } finally {

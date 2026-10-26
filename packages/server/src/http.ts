@@ -13,7 +13,8 @@ import {
 import { z } from "zod";
 import { LocalApi, OPEN_STATUSES, clampWatchTimeout, waitForCreated } from "./api.js";
 import type { Dispatcher } from "./dispatch.js";
-import { TransitionError } from "./domain.js";
+import { TransitionError, deliveryOf } from "./domain.js";
+import type { LiveClients } from "./live-clients.js";
 import { createMcpServer } from "./mcp.js";
 import { decidePairing, readPairing, writePairing } from "./pairing.js";
 import { rootFromPort, rootFromSources } from "./project-root.js";
@@ -135,11 +136,20 @@ export interface DaemonOptions {
   host: string;
   /** File with the pinned Firefox origin of POST /pair. */
   pairingPath: string;
-  /** Background agent runs for annotations of sites in automatic mode; absent: the field is ignored. */
+  /** Background agent runs for annotations of sites in Background agent mode; absent: the field is ignored. */
   dispatcher?: Dispatcher;
+  /** Claude Code sessions with a connected channel, for Live session mode. */
+  live: LiveClients;
 }
 
-export function createDaemon({ store, policy, host, pairingPath, dispatcher }: DaemonOptions): Server {
+/** Identity of a channel stream: `GET /events?clientPid=<claude pid>&cwd=<dir>&entrypoint=<cli>`. */
+const ClientQuery = z.object({
+  clientPid: z.coerce.number().int().positive(),
+  cwd: z.string().min(1),
+  entrypoint: z.string().nullable(),
+});
+
+export function createDaemon({ store, policy, host, pairingPath, dispatcher, live }: DaemonOptions): Server {
   const api = new LocalApi(store);
   const routes: Route[] = [];
   const mcpSessions = new Map<string, McpSession>();
@@ -180,6 +190,7 @@ export function createDaemon({ store, policy, host, pairingPath, dispatcher }: D
     return store.setProjectRoot(session.id, projectRoot, "agent");
   });
   route("GET", "/sessions/:id", ({ params }) => store.getSession(params[0]!));
+  route("GET", "/sessions/:id/clients", ({ params }) => live.forRoot(store.getSession(params[0]!).projectRoot));
   route("GET", "/sessions/:id/annotations", ({ params, url }) =>
     store.listAnnotations({ sessionId: params[0]!, statuses: parseStatuses(url.searchParams.get("status")) }),
   );
@@ -198,13 +209,16 @@ export function createDaemon({ store, policy, host, pairingPath, dispatcher }: D
     const input = await parseBody(req, AnnotationInput);
     const session = store.getSession(params[0]!);
     // Set before the annotation exists, so hooks and the channel already scope it to the project.
+    let scoped = session;
     if (!session.projectRoot) {
       const root = rootFromSources(input.targets.map((target) => target.source));
-      if (root) store.setProjectRoot(session.id, root, "path");
+      if (root) scoped = store.setProjectRoot(session.id, root, "path");
     }
-    const annotation = store.createAnnotation(session.id, input);
-    if (input.dispatch) dispatcher?.enqueue(annotation, input.dispatch);
-    return annotation;
+    const delivery = live.prepare(scoped, deliveryOf(input));
+    const annotation = store.createAnnotation(session.id, input, delivery);
+    if (delivery.mode === "background") dispatcher?.enqueue(annotation, delivery);
+    live.afterCreate(annotation);
+    return store.getAnnotation(annotation.id);
   });
 
   route("GET", "/annotations", ({ url }) =>
@@ -243,6 +257,15 @@ export function createDaemon({ store, policy, host, pairingPath, dispatcher }: D
     "/events",
     (ctx) => {
       const sessionId = ctx.url.searchParams.get("sessionId");
+      if (ctx.url.searchParams.has("clientPid")) {
+        const identity = ClientQuery.parse({
+          clientPid: ctx.url.searchParams.get("clientPid"),
+          cwd: ctx.url.searchParams.get("cwd"),
+          entrypoint: ctx.url.searchParams.get("entrypoint"),
+        });
+        const release = live.connect({ pid: identity.clientPid, cwd: identity.cwd, entrypoint: identity.entrypoint });
+        if (release) ctx.req.on("close", release);
+      }
       openEventStream(ctx, store, (event) => {
         if (!sessionId) return true;
         return event.type === "annotation.deleted" ? event.sessionId === sessionId : event.annotation.sessionId === sessionId;

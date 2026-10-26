@@ -114,7 +114,10 @@ No token to paste: the extension pairs with the daemon on first use.
   again.
 - **MCP server fails in Claude Code** with an old Node: set `UI_ANNOTATE_NODE=/path/to/node` in the
   environment Claude Code starts with.
-- **Automatic mode does nothing**: the daemon runs `claude`, `codex` or `cursor-agent` from its own
+- **Live session lists no sessions**: start Claude Code in the project folder with
+  `claude --dangerously-load-development-channels plugin:ui-annotate@ui-annotate-local`; the page
+  needs a project root. A session started without the flag is listed, yet drops channel messages.
+- **Background agent does nothing**: the daemon runs `claude`, `codex` or `cursor-agent` from its own
   `PATH`; set `UI_ANNOTATE_CLAUDE_BIN` / `UI_ANNOTATE_CODEX_BIN` / `UI_ANNOTATE_CURSOR_BIN` for the
   daemon and restart it. The annotation thread shows the error.
 - Daemon data: `~/.local/share/ui-annotate/db.sqlite`; token: `~/.config/ui-annotate/token`;

@@ -112,13 +112,42 @@ export type Viewport = z.infer<typeof Viewport>;
 export const DispatchAgent = z.enum(["claude", "codex", "cursor"]);
 export type DispatchAgent = z.infer<typeof DispatchAgent>;
 
-/** Hand the annotation to a background agent run (automatic mode of the site). */
+/** Hand the annotation to a background agent run (Background agent mode of the site). */
 export const Dispatch = z.object({
   agent: DispatchAgent,
   /** Quiet period before the run; annotations arriving meanwhile join the same run. 0: at once. */
   delaySeconds: z.number().int().min(0).max(600),
 });
 export type Dispatch = z.infer<typeof Dispatch>;
+
+/**
+ * Who gets the annotation, chosen per site in the popup:
+ * - off: every agent session of the project (channel and hooks);
+ * - session: one live Claude Code session, identified by the PID of its `claude` process;
+ * - background: a background agent run of the daemon, hidden from the live sessions.
+ */
+export const Delivery = z.discriminatedUnion("mode", [
+  z.object({ mode: z.literal("off") }),
+  z.object({ mode: z.literal("session"), clientPid: int.positive().nullable() }),
+  Dispatch.extend({ mode: z.literal("background") }),
+]);
+export type Delivery = z.infer<typeof Delivery>;
+
+export const DELIVERY_OFF: Delivery = { mode: "off" };
+
+/** A Claude Code session whose ui-annotate channel is connected to the daemon. */
+export const LiveClient = z.object({
+  /** PID of the `claude` process; hooks of the same session see it as CLAUDE_PID. */
+  pid: int.positive(),
+  cwd: z.string(),
+  /** Session name (/rename) and state, read from Claude Code's session file when present. */
+  name: z.string().nullable(),
+  status: z.enum(["idle", "busy"]).nullable(),
+  /** CLAUDE_CODE_ENTRYPOINT: `cli` for a terminal, `sdk-cli` for Remote Control and background sessions. */
+  entrypoint: z.string().nullable(),
+  connectedAt: z.string(),
+});
+export type LiveClient = z.infer<typeof LiveClient>;
 
 /** Body of POST /sessions/:id/annotations. */
 export const AnnotationInput = z.object({
@@ -131,6 +160,8 @@ export const AnnotationInput = z.object({
   area: Rect.nullable().default(null),
   url: text(LIMITS.url),
   viewport: Viewport,
+  delivery: Delivery.nullable().default(null),
+  /** API level 4 form of `delivery: { mode: "background" }`, still sent by older extensions. */
   dispatch: Dispatch.nullable().default(null),
 });
 export type AnnotationInput = z.input<typeof AnnotationInput>;
@@ -167,6 +198,8 @@ export const Annotation = z.object({
   area: Rect.nullable(),
   url: z.string(),
   viewport: Viewport,
+  /** Absent in events of a daemon older than API level 5. */
+  delivery: Delivery.default(DELIVERY_OFF),
   resolvedBy: ThreadRole.nullable(),
   createdAt: z.string(),
   updatedAt: z.string(),
