@@ -117,6 +117,9 @@ No token to paste: the extension pairs with the daemon on first use.
 - **Live session lists no sessions**: start Claude Code in the project folder with
   `claude --dangerously-load-development-channels plugin:ui-annotate@ui-annotate-local`; the page
   needs a project root. A session started without the flag is listed, yet drops channel messages.
+  With the plugin in `allowedChannelPlugins` of the managed settings (README, *Live session*),
+  `claude --channels plugin:ui-annotate@ui-annotate-local` replaces the flag. `--channels` for a
+  plugin outside the allowlist starts Claude Code without the channel.
 - **Background agent does nothing**: the daemon runs `claude`, `codex` or `cursor-agent` from its own
   `PATH`; set `UI_ANNOTATE_CLAUDE_BIN` / `UI_ANNOTATE_CODEX_BIN` / `UI_ANNOTATE_CURSOR_BIN` for the
   daemon and restart it. The annotation thread shows the error.

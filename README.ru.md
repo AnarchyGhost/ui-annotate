@@ -178,8 +178,22 @@ Popup → *This site* → **New annotations go to** определяет, кто
 - Сессия без флага channel молча теряет сообщения. Если за 60 с реакции нет, переписка один раз
   говорит об этом.
 
-Channels в Claude Code — research preview: только интерактивные сессии, флаг обязателен для плагинов
-вне allowlist Anthropic.
+Channels в Claude Code — research preview: только интерактивные сессии, а `--channels` принимает
+только плагины из allowlist. По умолчанию ui-annotate в него не входит, отсюда флаг разработки и
+диалог подтверждения при каждом запуске. Чтобы разрешить плагин один раз, добавьте его в файл
+[managed settings](https://code.claude.com/docs/en/settings) (в Linux
+`/etc/claude-code/managed-settings.json`, нужен root; проверено на тарифе Max без организации):
+
+```json
+{
+  "channelsEnabled": true,
+  "allowedChannelPlugins": [{ "marketplace": "ui-annotate-local", "plugin": "ui-annotate" }]
+}
+```
+
+После этого хватает `claude --channels plugin:ui-annotate@ui-annotate-local`; набор сокращает alias
+в shell. Managed settings приоритетнее пользовательских во всех сессиях; эти два ключа касаются
+только channels.
 
 ### Background agent
 

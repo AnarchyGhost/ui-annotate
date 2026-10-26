@@ -178,8 +178,22 @@ block Stop.
 - A session started without the channel flag drops channel messages silently. After 60 s without a
   reaction the thread says so once.
 
-Channels are a research preview of Claude Code: interactive sessions only, the flag is required for
-plugins outside Anthropic's allowlist.
+Channels are a research preview of Claude Code: interactive sessions only, and `--channels` accepts
+only plugins on an allowlist. Without changes ui-annotate is outside it, hence the development flag
+and its confirmation dialog on every start. To allow the plugin once, add it to the
+[managed settings](https://code.claude.com/docs/en/settings) file (on Linux
+`/etc/claude-code/managed-settings.json`, root required; checked with a Max plan, no organization):
+
+```json
+{
+  "channelsEnabled": true,
+  "allowedChannelPlugins": [{ "marketplace": "ui-annotate-local", "plugin": "ui-annotate" }]
+}
+```
+
+Then `claude --channels plugin:ui-annotate@ui-annotate-local` is enough; a shell alias saves typing.
+Managed settings take precedence over user settings in every session; these two keys affect only
+channels.
 
 ### Background agent
 
